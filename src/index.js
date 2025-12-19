@@ -1,7 +1,13 @@
+require('./instrument');
+const Sentry = require('@sentry/node');
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
+
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
 const anthropic = new Anthropic();
 const PORT = process.env.PORT || 3000;
 
@@ -181,6 +187,9 @@ app.get('/chat/:session_id', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
+
+// Sentry error handler (must be before other error handlers)
+app.use(Sentry.Handlers.errorHandler());
 
 // Error handler
 app.use((err, req, res, next) => {
