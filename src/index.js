@@ -1,5 +1,8 @@
+require('./instrumentation');
+
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
+const { z } = require('zod');
 
 const app = express();
 const anthropic = new Anthropic();
@@ -7,6 +10,13 @@ const PORT = process.env.PORT || 3000;
 
 // In-memory message history store (keyed by session_id)
 const messageHistory = new Map();
+
+// Zod schemas for tool input validation
+const toolSchemas = {
+  get_current_time: z.object({
+    timezone: z.string().optional()
+  })
+};
 
 // Tool definitions
 const tools = [
@@ -28,10 +38,29 @@ const tools = [
 
 // Tool execution function
 function executeTool(toolName, toolInput) {
+  // Validate input with Zod schema
+  const schema = toolSchemas[toolName];
+  if (!schema) {
+    return { error: `Unknown tool: ${toolName}` };
+  }
+
+  const validation = schema.safeParse(toolInput);
+  if (!validation.success) {
+    return { 
+      error: 'Invalid tool input', 
+      details: validation.error.issues.map(issue => ({
+        path: issue.path.join('.'),
+        message: issue.message
+      }))
+    };
+  }
+
+  const validatedInput = validation.data;
+
   switch (toolName) {
     case 'get_current_time': {
       const now = new Date();
-      const timezone = toolInput.timezone || 'UTC';
+      const timezone = validatedInput.timezone || 'UTC';
       try {
         const formatted = now.toLocaleString('en-US', { timeZone: timezone });
         return {
